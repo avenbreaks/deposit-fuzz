@@ -1,0 +1,61 @@
+name: Deposit-Fuzz CI/CD
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    env:
+      ETH1_NETWORK: "https://rpc.davinci.bz" # RPC environment davinci chain
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Set up Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        profile: minimal
+        toolchain: stable
+        override: true
+
+    - name: Install ethereal
+      run: |
+        wget https://github.com/wealdtech/ethereal/releases/download/v2.9.2/ethereal-2.9.2-linux-amd64.tar.gz
+        tar -xzf ethereal-2.9.2-linux-amd64.tar.gz
+        chmod +x ethereal
+        sudo mv ethereal /usr/local/bin/
+
+    - name: Install eth2-val-tools
+      run: |
+        git clone https://github.com/protolambda/eth2-val-tools.git
+        cd eth2-val-tools
+        go install ./...
+        sudo mv $(go env GOPATH)/bin/eth2-val-tools /usr/local/bin/
+
+    - name: Load secrets
+      run: |
+        if [ -f secrets.env ]; then
+          set -o allexport
+          source secrets.env
+          set +o allexport
+        fi
+
+    - name: Build Deposit-Fuzz
+      run: cargo build --release
+
+    - name: Run Deposit-Fuzz (default)
+      run: ./target/release/deposit-fuzz
+
+    - name: Run Deposit-Fuzz with randomize
+      run: ./target/release/deposit-fuzz --randomize
+
+    - name: Run Deposit-Fuzz with custom RPC
+      run: ./target/release/deposit-fuzz --rpc http://127.0.0.1:8545
